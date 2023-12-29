@@ -68,7 +68,8 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
 
     add(
       RectangleHitbox(
-        size: Vector2.all(16),
+        size: Vector2(8,10),
+        position: Vector2(4, 2),
         isSolid: true,
         collisionType: CollisionType.active,
       ),
@@ -151,7 +152,7 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
     PositionComponent other,
   ) {
     if (other is UnitBase) {
-      if(other.unitTeam != unitTeam){
+      if (other.unitTeam != unitTeam) {
         temporalTarget = other;
       }
     }
