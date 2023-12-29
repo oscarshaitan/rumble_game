@@ -34,10 +34,16 @@ enum UnitState {
   attackBottomLeft,
 }
 
+enum UnitTeam {
+  red,
+  cyan;
+}
+
 class UnitBase extends SpriteAnimationGroupComponent<UnitState>
-    with HasGameReference<MyGame>, TapCallbacks, DoubleTapCallbacks, HasCollisionDetection {
-  UnitBase(
-    this.spriteSheetPath, {
+    with HasGameReference<MyGame>, TapCallbacks, DoubleTapCallbacks, CollisionCallbacks {
+  UnitBase({
+    required this.spriteSheetPath,
+    required this.unitTeam,
     super.key,
   }) : super(size: Vector2.all(16), scale: Vector2.all(10), current: UnitState.idleTop);
 
@@ -45,7 +51,8 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
 
   final String spriteSheetPath;
 
-  bool lockMove = true;
+  final UnitTeam unitTeam;
+  bool lockMove = false;
 
   UnitBase? temporalTarget;
   UnitBase? mainTarget;
@@ -56,6 +63,28 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
 
   @override
   Future<void> onLoad() async {
+    debugMode = true;
+    await _setUpAnimations();
+
+    add(
+      RectangleHitbox(
+        size: Vector2.all(16),
+        isSolid: true,
+        collisionType: CollisionType.active,
+      ),
+    );
+
+    add(
+      RectangleHitbox(
+        position: Vector2(-24, -24),
+        size: Vector2.all(64),
+        isSolid: false,
+        collisionType: CollisionType.passive,
+      ),
+    );
+  }
+
+  Future<void> _setUpAnimations() async {
     spriteSheet = SpriteSheet(
       image: await Flame.images.load(spriteSheetPath),
       srcSize: Vector2.all(32.0),
@@ -114,12 +143,19 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
       UnitState.attackLeft: attackLeftAnimation,
       UnitState.attackBottomLeft: attackBottomLeftAnimation,
     };
+  }
 
-    add(
-      RectangleHitbox(
-        collisionType: CollisionType.passive,
-      ),
-    );
+  @override
+  void onCollision(
+    Set<Vector2> intersectionPoints,
+    PositionComponent other,
+  ) {
+    if (other is UnitBase) {
+      if(other.unitTeam != unitTeam){
+        temporalTarget = other;
+      }
+    }
+    super.onCollision(intersectionPoints, other);
   }
 
   @override

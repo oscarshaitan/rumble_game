@@ -13,7 +13,7 @@ void main() {
   );
 }
 
-class MyGame extends FlameGame {
+class MyGame extends FlameGame with HasCollisionDetection {
   @override
   Color backgroundColor() => const Color(0x00000000);
 
