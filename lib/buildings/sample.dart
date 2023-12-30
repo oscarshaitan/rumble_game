@@ -21,7 +21,7 @@ class Tree extends SpriteComponent with HasGameReference<MyGame>, TapCallbacks, 
   _randomGenerateUnits() async {
     while (true) {
       if (game.children.query<OrcGrunt>().length <= 3) {
-        var randomGenerated = Random().nextInt(100);
+        var randomGenerated = Random().nextInt(100).abs();
         if (randomGenerated < 30) {
           var newOrc = OrcGrunt();
           newOrc.center = Vector2(center.x, center.y - 96);
@@ -35,6 +35,8 @@ class Tree extends SpriteComponent with HasGameReference<MyGame>, TapCallbacks, 
 
   @override
   void onDoubleTapUp(DoubleTapEvent event) {
-    _randomGenerateUnits();
+    var newOrc = OrcGrunt();
+    newOrc.center = Vector2(center.x, center.y - 96);
+    game.add(newOrc);
   }
 }

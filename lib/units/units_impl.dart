@@ -2,7 +2,7 @@ import 'package:flame/components.dart';
 import 'package:rumble_game/units/unit_base.dart';
 
 class OrcGrunt extends UnitBase {
-  OrcGrunt({super.key}) : super(spriteSheetPath: 'orc_soldier_red.png', unitTeam: UnitTeam.red);
+  OrcGrunt({super.key}) : super(spriteSheetPath: 'orc_soldier_red.png', unitTeam: UnitTeam.red, startingHP: 1);
 
   bool _shouldMarchTop = true;
 
@@ -27,7 +27,14 @@ class OrcGrunt extends UnitBase {
 }
 
 class HumanSoldier extends UnitBase {
-  HumanSoldier({super.key}) : super(spriteSheetPath: 'human_soldier_cyan.png', unitTeam: UnitTeam.cyan);
+  HumanSoldier({super.key})
+      : super(
+          spriteSheetPath: 'human_soldier_cyan.png',
+          unitTeam: UnitTeam.cyan,
+          startingHP: 30,
+          atk: 1,
+          unitScale: 10,
+        );
 
   @override
   Future<void> onLoad() async {

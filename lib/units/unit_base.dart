@@ -32,6 +32,7 @@ enum UnitState {
   attackTopLeft,
   attackLeft,
   attackBottomLeft,
+  dieBottomRight,
 }
 
 enum UnitTeam {
@@ -46,31 +47,52 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
     required this.unitTeam,
     this.unitSize = 16,
     this.unitScale = 5,
+    this.startingHP = 5,
+    this.atk = 1,
+    this.attackCooldown = 1.1,
+    this.attackAnimationTime = 1,
     super.key,
-  }) : super(size: Vector2.all(unitSize), scale: Vector2.all(unitScale), current: UnitState.idleTop);
+  }) : super(
+          size: Vector2.all(unitSize),
+          scale: Vector2.all(unitScale),
+          current: UnitState.idleTop,
+          removeOnFinish: {UnitState.dieBottomRight: true},
+        );
 
   late SpriteSheet spriteSheet;
 
   final String spriteSheetPath;
   final double unitSize;
   final double unitScale;
+  final double startingHP;
+  final double atk;
+  final double attackCooldown;
+  final double attackAnimationTime;
+  late final Duration _attackAnimationTime =
+      Duration(seconds: attackAnimationTime.floor(), milliseconds: ((attackAnimationTime % 1) * 100).toInt());
+  late final Duration _attackCooldown =
+      Duration(seconds: attackCooldown.floor(), milliseconds: ((attackCooldown % 1) * 100).toInt());
 
+  late double hp = startingHP;
   final UnitTeam unitTeam;
-  bool lockMove = false;
+  bool attackInCooldown = false;
 
-  UnitBase? temporalTarget;
   UnitBase? mainTarget;
-  List<UnitBase> targetQueue = [];
+  Set<UnitBase> targetQueue = {};
 
-  UnitBase? get target => temporalTarget ?? mainTarget;
+  UnitBase? get target => targetQueue.firstOrNull ?? mainTarget;
 
   double? get targetAngle => target == null ? null : _calculateAngle();
 
   @override
   Future<void> onLoad() async {
-    debugMode = true;
+    debugMode = false;
     await _setUpAnimations();
 
+    _setUpHitboxes();
+  }
+
+  void _setUpHitboxes() {
     add(
       RectangleHitbox(
         size: Vector2(unitSize / 2, (unitSize / 2) * 1.3),
@@ -96,6 +118,7 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
       srcSize: Vector2.all(32.0),
     );
 
+    //<editor-fold desc="Walk animations">
     final walkingBottomAnimation = spriteSheet.createAnimation(row: 0, stepTime: 0.2, from: 1, to: 5);
     final walkingBottomRightAnimation = spriteSheet.createAnimation(row: 1, stepTime: 0.2, from: 1, to: 5);
     final walkingRightAnimation = spriteSheet.createAnimation(row: 2, stepTime: 0.2, from: 1, to: 5);
@@ -104,7 +127,13 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
     final walkingTopLeftAnimation = spriteSheet.createAnimation(row: 5, stepTime: 0.2, from: 1, to: 5);
     final walkingLeftAnimation = spriteSheet.createAnimation(row: 6, stepTime: 0.2, from: 1, to: 5);
     final walkingBottomLeftAnimation = spriteSheet.createAnimation(row: 7, stepTime: 0.2, from: 1, to: 5);
+    //</editor-fold>
 
+    //<editor-fold desc="Die animations">
+    final dieBottomRightAnimation = spriteSheet.createAnimation(row: 1, stepTime: 0.15, from: 20, to: 25, loop: false);
+    //</editor-fold>
+
+    //<editor-fold desc="Idle animations">
     final idleBottomAnimation = spriteSheet.createAnimation(row: 0, stepTime: 0.2, from: 0, to: 1);
     final idleBottomRightAnimation = spriteSheet.createAnimation(row: 1, stepTime: 0.2, from: 0, to: 1);
     final idleRightAnimation = spriteSheet.createAnimation(row: 2, stepTime: 0.2, from: 0, to: 1);
@@ -113,15 +142,53 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
     final idleTopLeftAnimation = spriteSheet.createAnimation(row: 5, stepTime: 0.2, from: 0, to: 1);
     final idleLeftAnimation = spriteSheet.createAnimation(row: 6, stepTime: 0.2, from: 0, to: 1);
     final idleBottomLeftAnimation = spriteSheet.createAnimation(row: 7, stepTime: 0.2, from: 0, to: 1);
+    //</editor-fold>
 
-    final attackBottomAnimation = spriteSheet.createAnimation(row: 0, stepTime: 0.2, from: 5, to: 9);
-    final attackBottomRightAnimation = spriteSheet.createAnimation(row: 1, stepTime: 0.2, from: 5, to: 9);
-    final attackRightAnimation = spriteSheet.createAnimation(row: 2, stepTime: 0.2, from: 5, to: 9);
-    final attackTopRightAnimation = spriteSheet.createAnimation(row: 3, stepTime: 0.2, from: 5, to: 9);
-    final attackTopAnimation = spriteSheet.createAnimation(row: 4, stepTime: 0.2, from: 5, to: 9);
-    final attackTopLeftAnimation = spriteSheet.createAnimation(row: 5, stepTime: 0.2, from: 5, to: 9);
-    final attackLeftAnimation = spriteSheet.createAnimation(row: 6, stepTime: 0.2, from: 5, to: 9);
-    final attackBottomLeftAnimation = spriteSheet.createAnimation(row: 7, stepTime: 0.2, from: 5, to: 9);
+    //<editor-fold desc="Attack Animations">
+
+    int initialAttackFrame = 5;
+    int finalAttackFrame = 9;
+    final attackBottomAnimation = spriteSheet.createAnimation(
+        row: 0,
+        stepTime: attackAnimationTime / (finalAttackFrame - initialAttackFrame),
+        from: initialAttackFrame,
+        to: finalAttackFrame);
+    final attackBottomRightAnimation = spriteSheet.createAnimation(
+        row: 1,
+        stepTime: attackAnimationTime / (finalAttackFrame - initialAttackFrame),
+        from: initialAttackFrame,
+        to: finalAttackFrame);
+    final attackRightAnimation = spriteSheet.createAnimation(
+        row: 2,
+        stepTime: attackAnimationTime / (finalAttackFrame - initialAttackFrame),
+        from: initialAttackFrame,
+        to: finalAttackFrame);
+    final attackTopRightAnimation = spriteSheet.createAnimation(
+        row: 3,
+        stepTime: attackAnimationTime / (finalAttackFrame - initialAttackFrame),
+        from: initialAttackFrame,
+        to: finalAttackFrame);
+    final attackTopAnimation = spriteSheet.createAnimation(
+        row: 4,
+        stepTime: attackAnimationTime / (finalAttackFrame - initialAttackFrame),
+        from: initialAttackFrame,
+        to: finalAttackFrame);
+    final attackTopLeftAnimation = spriteSheet.createAnimation(
+        row: 5,
+        stepTime: attackAnimationTime / (finalAttackFrame - initialAttackFrame),
+        from: initialAttackFrame,
+        to: finalAttackFrame);
+    final attackLeftAnimation = spriteSheet.createAnimation(
+        row: 6,
+        stepTime: attackAnimationTime / (finalAttackFrame - initialAttackFrame),
+        from: initialAttackFrame,
+        to: finalAttackFrame);
+    final attackBottomLeftAnimation = spriteSheet.createAnimation(
+        row: 7,
+        stepTime: attackAnimationTime / (finalAttackFrame - initialAttackFrame),
+        from: initialAttackFrame,
+        to: finalAttackFrame);
+    //</editor-fold>
 
     animations = {
       UnitState.idleBottom: idleBottomAnimation,
@@ -148,7 +215,31 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
       UnitState.attackTopLeft: attackTopLeftAnimation,
       UnitState.attackLeft: attackLeftAnimation,
       UnitState.attackBottomLeft: attackBottomLeftAnimation,
+      UnitState.dieBottomRight: dieBottomRightAnimation,
     };
+
+    animationTickers?[UnitState.attackBottom]?.onComplete = _onAttackCompleted;
+    animationTickers?[UnitState.attackBottomRight]?.onComplete = _onAttackCompleted;
+    animationTickers?[UnitState.attackRight]?.onComplete = _onAttackCompleted;
+    animationTickers?[UnitState.attackTopRight]?.onComplete = _onAttackCompleted;
+    animationTickers?[UnitState.attackTop]?.onComplete = _onAttackCompleted;
+    animationTickers?[UnitState.attackTopLeft]?.onComplete = _onAttackCompleted;
+    animationTickers?[UnitState.attackLeft]?.onComplete = _onAttackCompleted;
+    animationTickers?[UnitState.attackBottomLeft]?.onComplete = _onAttackCompleted;
+    animationTickers?[UnitState.dieBottomRight]?.onComplete = _onAttackCompleted;
+  }
+
+  _onAttackCompleted() {
+    if (!target!.isRemoved && !isRemoved) {
+      if (target!.hp > 0) {
+        target!.getAttacked(atk);
+        if (target!.hp <= 0) {
+          targetQueue.remove(target);
+        }
+      }
+    } else {
+      targetQueue.remove(target);
+    }
   }
 
   @override
@@ -158,22 +249,16 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   ) {
     if (other is UnitBase) {
       if (other.unitTeam != unitTeam) {
-        if (temporalTarget == null) {
-          temporalTarget = other;
-        } else {
-          targetQueue.add(other);
-        }
+        targetQueue.add(other);
       }
     }
     super.onCollision(intersectionPoints, other);
   }
 
   @override
-  void update(double dt) {
-    super.update(dt);
-
-    if (lockMove) {
-      current = UnitState.idleTop;
+  void update(double dt) async {
+    if (hp <= 0) {
+      current = UnitState.dieBottomRight;
     } else {
       if (target != null) {
         if (_isTargetOnAttackRange()) {
@@ -185,28 +270,57 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
         _walk(dt);
       }
     }
+
+    super.update(dt);
   }
 
-  _attack() {
-    var angle = targetAngle!;
-    if (target != null) {
-      if (angle <= 22.5 && angle >= -22.5) {
-        current = UnitState.attackLeft;
-      } else if (angle > 22.5 && angle <= 67.5) {
-        current = UnitState.attackTopLeft;
-      } else if (angle > 67.5 && angle <= 112.5) {
-        current = UnitState.attackTop;
-      } else if (angle > 112.5 && angle <= 157.5) {
-        current = UnitState.attackTopRight;
-      } else if ((angle > 157.5 && angle > -157.5)) {
-        current = UnitState.attackRight;
-      } else if (angle < -112.5 && angle >= -157.5) {
-        current = UnitState.attackBottomRight;
-      } else if (angle < -67.5 && angle >= -112.5) {
-        current = UnitState.attackBottom;
-      } else if (angle < -22.5 && angle >= -67.5) {
-        current = UnitState.attackBottomLeft;
+  _attack() async {
+    if (target != null && !target!.isRemoved) {
+      if (!attackInCooldown) {
+        attackInCooldown = true;
+        var angle = targetAngle!;
+        if (angle <= 22.5 && angle >= -22.5) {
+          current = UnitState.attackLeft;
+        } else if (angle > 22.5 && angle <= 67.5) {
+          current = UnitState.attackTopLeft;
+        } else if (angle > 67.5 && angle <= 112.5) {
+          current = UnitState.attackTop;
+        } else if (angle > 112.5 && angle <= 157.5) {
+          current = UnitState.attackTopRight;
+        } else if ((angle > 157.5 && angle > -157.5)) {
+          current = UnitState.attackRight;
+        } else if (angle < -112.5 && angle >= -157.5) {
+          current = UnitState.attackBottomRight;
+        } else if (angle < -67.5 && angle >= -112.5) {
+          current = UnitState.attackBottom;
+        } else if (angle < -22.5 && angle >= -67.5) {
+          current = UnitState.attackBottomLeft;
+        }
+
+        await Future.delayed(_attackAnimationTime).then((_) {
+          if (!target!.isRemoved && !isRemoved) {
+            if (target!.hp > 0) {
+              target!.getAttacked(atk);
+              if (target!.hp <= 0) {
+                targetQueue.remove(target);
+              }
+            }
+          } else {
+            targetQueue.remove(target);
+          }
+        });
+        Future.delayed(_attackCooldown).then((_) {
+          attackInCooldown = false;
+        });
       }
+    } else {
+      targetQueue.remove(target);
+    }
+  }
+
+  getAttacked(double dmg) {
+    if (hp > 0) {
+      hp -= dmg;
     }
   }
 
@@ -235,7 +349,6 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   _walk(double dt) {
     const maxSpeed = 50;
     var maxSpeedNoAngle = sqrt(pow(maxSpeed, 2) / 2);
-    //todo fix diagonals to use pitagoras
     var horizontalSpeed = targetAngle != null ? (maxSpeed * cos(targetAngle! * pi / 180)).abs() : maxSpeedNoAngle;
     var verticalSpeed = targetAngle != null ? (maxSpeed * sin(targetAngle! * pi / 180)).abs() : maxSpeedNoAngle;
     switch (current) {
@@ -308,7 +421,7 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
 
   @override
   void onTapDown(event) {
-    lockMove = !lockMove;
+    current = UnitState.dieBottomRight;
   }
 
   @override
