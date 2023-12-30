@@ -4,7 +4,7 @@ import 'package:flame/extensions.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:rumble_game/buildings/sample.dart';
-import 'package:rumble_game/units/orcs/orc_grunt.dart';
+import 'package:rumble_game/units/units_impl.dart';
 
 void main() {
   final myGame = MyGame();
@@ -20,7 +20,7 @@ class MyGame extends FlameGame with HasCollisionDetection {
   @override
   Future<void> onLoad() async {
     add(Tree(priority: 1));
-    add(HumanSoldier(key: ComponentKey.named('soldier')));
+    add(HumanSoldier());
   }
 }
 

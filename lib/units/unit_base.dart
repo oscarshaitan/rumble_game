@@ -44,18 +44,23 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   UnitBase({
     required this.spriteSheetPath,
     required this.unitTeam,
+    this.unitSize = 16,
+    this.unitScale = 5,
     super.key,
-  }) : super(size: Vector2.all(16), scale: Vector2.all(10), current: UnitState.idleTop);
+  }) : super(size: Vector2.all(unitSize), scale: Vector2.all(unitScale), current: UnitState.idleTop);
 
   late SpriteSheet spriteSheet;
 
   final String spriteSheetPath;
+  final double unitSize;
+  final double unitScale;
 
   final UnitTeam unitTeam;
   bool lockMove = false;
 
   UnitBase? temporalTarget;
   UnitBase? mainTarget;
+  List<UnitBase> targetQueue = [];
 
   UnitBase? get target => temporalTarget ?? mainTarget;
 
@@ -68,8 +73,8 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
 
     add(
       RectangleHitbox(
-        size: Vector2(8,10),
-        position: Vector2(4, 2),
+        size: Vector2(unitSize / 2, (unitSize / 2) * 1.3),
+        position: Vector2(unitSize / 4, unitSize / 10),
         isSolid: true,
         collisionType: CollisionType.active,
       ),
@@ -77,8 +82,8 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
 
     add(
       RectangleHitbox(
-        position: Vector2(-24, -24),
-        size: Vector2.all(64),
+        position: Vector2(-(unitSize * 1.5), -(unitSize * 1.5)),
+        size: Vector2.all(unitSize * 4),
         isSolid: false,
         collisionType: CollisionType.passive,
       ),
@@ -153,7 +158,11 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   ) {
     if (other is UnitBase) {
       if (other.unitTeam != unitTeam) {
-        temporalTarget = other;
+        if (temporalTarget == null) {
+          temporalTarget = other;
+        } else {
+          targetQueue.add(other);
+        }
       }
     }
     super.onCollision(intersectionPoints, other);
@@ -287,7 +296,7 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   bool _isTargetOnAttackRange() {
     double distance = center.distanceTo(target!.center);
 
-    return distance <= 70;
+    return distance <= unitSize * 2;
   }
 
   double _angleOfTarget(Vector2 unitPos, Vector2 targetPos) {
