@@ -5,6 +5,8 @@ import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/flame.dart';
 import 'package:flame/sprite.dart';
+import 'package:rumble_game/buildings/tree.dart';
+import 'package:rumble_game/game_core/enums.dart';
 import 'package:rumble_game/main.dart';
 
 enum UnitState {
@@ -35,18 +37,13 @@ enum UnitState {
   dieBottomRight,
 }
 
-enum UnitTeam {
-  red,
-  cyan;
-}
-
 class UnitBase extends SpriteAnimationGroupComponent<UnitState>
     with HasGameReference<MyGame>, TapCallbacks, DoubleTapCallbacks, CollisionCallbacks {
   UnitBase({
     required this.spriteSheetPath,
-    required this.unitTeam,
+    required this.team,
     this.unitSize = 16,
-    this.unitScale = 5,
+    this.unitScale = 6,
     this.startingHP = 5,
     this.atk = 1,
     this.attackCooldown = 1.1,
@@ -55,9 +52,11 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   }) : super(
           size: Vector2.all(unitSize),
           scale: Vector2.all(unitScale),
-          current: UnitState.idleTop,
+          current: team == Team.red ? UnitState.walkingBottom : UnitState.walkingTop,
           removeOnFinish: {UnitState.dieBottomRight: true},
-        );
+        ) {
+    hp = startingHP;
+  }
 
   late SpriteSheet spriteSheet;
 
@@ -73,20 +72,30 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   late final Duration _attackCooldown =
       Duration(seconds: attackCooldown.floor(), milliseconds: ((attackCooldown % 1) * 100).toInt());
 
-  late double hp = startingHP;
-  final UnitTeam unitTeam;
+  final Team team;
   bool attackInCooldown = false;
 
-  UnitBase? mainTarget;
-  Set<UnitBase> targetQueue = {};
+  Set<Component?> targetStaticQueue = {};
+  Set<Component> targetTemporalQueue = {};
 
-  UnitBase? get target => targetQueue.firstOrNull ?? mainTarget;
+  Component? get target {
+    if (targetTemporalQueue.where((element) => !element.isRemoved).isNotEmpty) {
+      return targetTemporalQueue.first;
+    } else if (targetStaticQueue.where((element) => !(element?.isRemoved ?? true)).isNotEmpty) {
+      return targetStaticQueue.last;
+    } else {
+      Future.delayed(Duration(seconds: 2)).then((value) {
+        game.paused = true;
+        game.overlays.add('game_over');
+      });
+      return null;
+    }
+  }
 
   double? get targetAngle => target == null ? null : _calculateAngle();
 
   @override
   Future<void> onLoad() async {
-    debugMode = false;
     await _setUpAnimations();
 
     _setUpHitboxes();
@@ -230,15 +239,34 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   }
 
   _onAttackCompleted() {
-    if (!target!.isRemoved && !isRemoved) {
-      if (target!.hp > 0) {
-        target!.getAttacked(atk);
-        if (target!.hp <= 0) {
-          targetQueue.remove(target);
+    _attackOrRemove();
+  }
+
+  void _attackOrRemove() {
+    if (target != null && !(target as Component).isRemoved && !isRemoved) {
+      if (target is Tree) {
+        if ((target as Tree).hp > 0) {
+          var remainingHP = (target as Tree).getAttacked(atk);
+          if (remainingHP <= 0) {
+            targetStaticQueue.remove(target);
+          }
+        }
+      }
+      if (target is UnitBase) {
+        if ((target as UnitBase).hp > 0) {
+          var remainingHP = (target as UnitBase).getAttacked(atk);
+          if (remainingHP <= 0) {
+            targetTemporalQueue.remove(target);
+          }
         }
       }
     } else {
-      targetQueue.remove(target);
+      if (target is UnitBase) {
+        targetTemporalQueue.remove(target);
+      }
+      if (target is Tree) {
+        targetStaticQueue.remove(target);
+      }
     }
   }
 
@@ -248,8 +276,8 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
     PositionComponent other,
   ) {
     if (other is UnitBase) {
-      if (other.unitTeam != unitTeam) {
-        targetQueue.add(other);
+      if (other.team != team) {
+        targetTemporalQueue.add(other);
       }
     }
     super.onCollision(intersectionPoints, other);
@@ -275,7 +303,7 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   }
 
   _attack() async {
-    if (target != null && !target!.isRemoved) {
+    if (target != null && !(target as Component).isRemoved) {
       if (!attackInCooldown) {
         attackInCooldown = true;
         var angle = targetAngle!;
@@ -298,29 +326,18 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
         }
 
         await Future.delayed(_attackAnimationTime).then((_) {
-          if (!target!.isRemoved && !isRemoved) {
-            if (target!.hp > 0) {
-              target!.getAttacked(atk);
-              if (target!.hp <= 0) {
-                targetQueue.remove(target);
-              }
-            }
-          } else {
-            targetQueue.remove(target);
-          }
+          _attackOrRemove();
         });
         Future.delayed(_attackCooldown).then((_) {
           attackInCooldown = false;
         });
       }
     } else {
-      targetQueue.remove(target);
-    }
-  }
-
-  getAttacked(double dmg) {
-    if (hp > 0) {
-      hp -= dmg;
+      if (target is UnitBase) {
+        targetTemporalQueue.remove(target);
+      } else {
+        targetStaticQueue.remove(target);
+      }
     }
   }
 
@@ -347,7 +364,7 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   }
 
   _walk(double dt) {
-    const maxSpeed = 50;
+    const maxSpeed = 100;
     var maxSpeedNoAngle = sqrt(pow(maxSpeed, 2) / 2);
     var horizontalSpeed = targetAngle != null ? (maxSpeed * cos(targetAngle! * pi / 180)).abs() : maxSpeedNoAngle;
     var verticalSpeed = targetAngle != null ? (maxSpeed * sin(targetAngle! * pi / 180)).abs() : maxSpeedNoAngle;
@@ -401,13 +418,13 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   }
 
   double _calculateAngle() {
-    var angle = _angleOfTarget(center, target!.center);
+    var angle = _angleOfTarget(center, (target as PositionComponent).center);
 
     return double.parse((angle).toStringAsFixed(2));
   }
 
   bool _isTargetOnAttackRange() {
-    double distance = center.distanceTo(target!.center);
+    double distance = center.distanceTo((target as PositionComponent).center);
 
     return distance <= unitSize * 2;
   }
@@ -421,11 +438,15 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
 
   @override
   void onTapDown(event) {
-    current = UnitState.dieBottomRight;
+    getAttacked(1);
   }
 
-  @override
-  void onLongTapDown(event) {
-    game.remove(this);
+  late double hp;
+
+  double getAttacked(double dmg) {
+    if (hp > 0) {
+      hp -= dmg;
+    }
+    return hp;
   }
 }
