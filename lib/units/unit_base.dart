@@ -78,6 +78,20 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
   Set<Component?> targetStaticQueue = {};
   Set<Component> targetTemporalQueue = {};
 
+  Component? get target {
+    if (targetTemporalQueue.where((element) => !element.isRemoved).isNotEmpty) {
+      return targetTemporalQueue.first;
+    } else if (targetStaticQueue.where((element) => !(element?.isRemoved ?? true)).isNotEmpty) {
+      return targetStaticQueue.last;
+    } else {
+      Future.delayed(const Duration(seconds: 2)).then((value) {
+        game.paused = true;
+        game.overlays.add('game_over');
+      });
+      return null;
+    }
+  }
+
   @override
   Future<void> onLoad() async {
     await _setUpAnimations();
@@ -91,7 +105,7 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
       srcSize: Vector2.all(32.0),
     );
 
-    //<editor-fold desc="Walk animations">
+//<editor-fold desc="Walk animations">
     final walkingBottomAnimation = spriteSheet.createAnimation(row: 0, stepTime: 0.2, from: 1, to: 5);
     final walkingBottomRightAnimation = spriteSheet.createAnimation(row: 1, stepTime: 0.2, from: 1, to: 5);
     final walkingRightAnimation = spriteSheet.createAnimation(row: 2, stepTime: 0.2, from: 1, to: 5);
@@ -100,13 +114,13 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
     final walkingTopLeftAnimation = spriteSheet.createAnimation(row: 5, stepTime: 0.2, from: 1, to: 5);
     final walkingLeftAnimation = spriteSheet.createAnimation(row: 6, stepTime: 0.2, from: 1, to: 5);
     final walkingBottomLeftAnimation = spriteSheet.createAnimation(row: 7, stepTime: 0.2, from: 1, to: 5);
-    //</editor-fold>
+//</editor-fold>
 
-    //<editor-fold desc="Die animations">
+//<editor-fold desc="Die animations">
     final dieBottomRightAnimation = spriteSheet.createAnimation(row: 1, stepTime: 0.15, from: 20, to: 25, loop: false);
-    //</editor-fold>
+//</editor-fold>
 
-    //<editor-fold desc="Idle animations">
+//<editor-fold desc="Idle animations">
     final idleBottomAnimation = spriteSheet.createAnimation(row: 0, stepTime: 0.2, from: 0, to: 1);
     final idleBottomRightAnimation = spriteSheet.createAnimation(row: 1, stepTime: 0.2, from: 0, to: 1);
     final idleRightAnimation = spriteSheet.createAnimation(row: 2, stepTime: 0.2, from: 0, to: 1);
@@ -115,9 +129,9 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
     final idleTopLeftAnimation = spriteSheet.createAnimation(row: 5, stepTime: 0.2, from: 0, to: 1);
     final idleLeftAnimation = spriteSheet.createAnimation(row: 6, stepTime: 0.2, from: 0, to: 1);
     final idleBottomLeftAnimation = spriteSheet.createAnimation(row: 7, stepTime: 0.2, from: 0, to: 1);
-    //</editor-fold>
+//</editor-fold>
 
-    //<editor-fold desc="Attack Animations">
+//<editor-fold desc="Attack Animations">
 
     int initialAttackFrame = 5;
     int finalAttackFrame = 9;
@@ -161,9 +175,9 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
         stepTime: attackAnimationTime / (finalAttackFrame - initialAttackFrame),
         from: initialAttackFrame,
         to: finalAttackFrame);
-    //</editor-fold>
+//</editor-fold>
 
-    //<editor-fold desc="Add Animations">
+//<editor-fold desc="Add Animations">
     animations = {
       UnitState.idleBottom: idleBottomAnimation,
       UnitState.idleBottomRight: idleBottomRightAnimation,
@@ -192,9 +206,9 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
       UnitState.dieBottomRight: dieBottomRightAnimation,
     };
 
-    //</editor-fold>
+//</editor-fold>
 
-    //<editor-fold desc="Animations Tickers">
+//<editor-fold desc="Animations Tickers">
     animationTickers?[UnitState.attackBottom]?.onComplete = _onAttackCompleted;
     animationTickers?[UnitState.attackBottomRight]?.onComplete = _onAttackCompleted;
     animationTickers?[UnitState.attackRight]?.onComplete = _onAttackCompleted;
@@ -205,7 +219,7 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
     animationTickers?[UnitState.attackBottomLeft]?.onComplete = _onAttackCompleted;
     animationTickers?[UnitState.dieBottomRight]?.onComplete = _onAttackCompleted;
 
-    //</editor-fold>
+//</editor-fold>
   }
 
   @override
@@ -216,57 +230,137 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
       if (target != null) {
         if (_isTargetOnAttackRange()) {
           _attack();
-        }
-        else {
+        } else {
           _followTarget(dt);
         }
       } else {
         _walk(dt);
       }
     }
-
     super.update(dt);
   }
 
+  _followTarget(double dt) {
+    var angle = targetAngle!;
+
+    if (angle <= 22.5 && angle >= -22.5) {
+      current = UnitState.walkingLeft;
+    }
+//<editor-fold desc="Animation Angle">
+    else if (angle > 22.5 && angle <= 67.5) {
+      current = UnitState.walkingTopLeft;
+    } else if (angle > 67.5 && angle <= 112.5) {
+      current = UnitState.walkingTop;
+    } else if (angle > 113.5 && angle <= 157.5) {
+      current = UnitState.walkingTopRight;
+    } else if ((angle > 157.5 && angle > -157.5)) {
+      current = UnitState.walkingRight;
+    } else if (angle < -113.5 && angle >= -157.5) {
+      current = UnitState.walkingBottomRight;
+    } else if (angle < -67.5 && angle >= -112.5) {
+      current = UnitState.walkingBottom;
+    } else if (angle < -22.5 && angle >= -67.5) {
+      current = UnitState.walkingBottomLeft;
+    }
+    //</editor-fold>
+    _walk(dt);
+  }
+
+  double _calculateAngle() {
+    var angle = _angleOfTarget(
+      center,
+      (target as PositionComponent).center,
+    );
+    return double.parse((angle).toStringAsFixed(2));
+  }
+
+  _walk(double dt) {
+//<editor-fold desc="Speed Math">
+    const maxSpeed = 100;
+    var maxSpeedNoAngle = sqrt(pow(maxSpeed, 2) / 2);
+    var horizontalSpeed = targetAngle != null ? (maxSpeed * cos(targetAngle! * pi / 180)).abs() : maxSpeedNoAngle;
+    var verticalSpeed = targetAngle != null ? (maxSpeed * sin(targetAngle! * pi / 180)).abs() : maxSpeedNoAngle;
+//</editor-fold>
+
+//<editor-fold desc="Other animations">
+    switch (current) {
+      case UnitState.idleBottom:
+      case UnitState.idleBottomRight:
+      case UnitState.idleRight:
+      case UnitState.idleTopRight:
+      case UnitState.idleTop:
+      case UnitState.idleTopLeft:
+      case UnitState.idleLeft:
+      case UnitState.idleBottomLeft:
+        break;
+      case UnitState.walkingBottom:
+        position.y += dt * maxSpeed;
+        break;
+      case UnitState.walkingBottomRight:
+        position.y += dt * verticalSpeed;
+        position.x += dt * horizontalSpeed;
+        break;
+      case UnitState.walkingRight:
+        position.x += dt * maxSpeed;
+        break;
+      case UnitState.walkingTopRight:
+        position.y -= dt * verticalSpeed;
+        position.x += dt * horizontalSpeed;
+        break;
+      case UnitState.walkingTop:
+        position.y -= dt * maxSpeed;
+        break;
+      case UnitState.walkingTopLeft:
+        position.y -= dt * verticalSpeed;
+        position.x -= dt * horizontalSpeed;
+        break;
+      case UnitState.walkingLeft:
+        position.x -= dt * maxSpeed;
+        break;
+      case UnitState.walkingBottomLeft:
+        position.y += dt * verticalSpeed;
+        position.x -= dt * horizontalSpeed;
+        break;
+      default:
+        break;
+    }
+//</editor-fold>
+    if (position.y > game.size.y) {
+      removeFromParent();
+    }
+  }
+
   void _setUpHitboxes() {
-    ///RANGE OF VISION HITBOX
     add(
+      ///RANGE OF VISION HITBOX
       RectangleHitbox(
-        position: Vector2(-(unitSize * 1.5), -(unitSize * 1.5)),
+        position: Vector2(
+          -(unitSize * 1.5),
+          -(unitSize * 1.5),
+        ),
         size: Vector2.all(unitSize * 4),
         isSolid: false,
         collisionType: CollisionType.passive,
       ),
     );
-
-    ///UNIT BODY HITBOX
     add(
+      ///UNIT BODY HITBOX
       RectangleHitbox(
-        size: Vector2(unitSize / 2, (unitSize / 2) * 1.3),
-        position: Vector2(unitSize / 4, unitSize / 10),
+        size: Vector2(
+          unitSize / 2,
+          (unitSize / 2) * 1.3,
+        ),
+        position: Vector2(
+          unitSize / 4,
+          unitSize / 10,
+        ),
         isSolid: true,
         collisionType: CollisionType.active,
       ),
     );
   }
 
-  Component? get target {
-    if (targetTemporalQueue.where((element) => !element.isRemoved).isNotEmpty) {
-      return targetTemporalQueue.first;
-    } else if (targetStaticQueue.where((element) => !(element?.isRemoved ?? true)).isNotEmpty) {
-      return targetStaticQueue.last;
-    } else {
-      Future.delayed(Duration(seconds: 2)).then((value) {
-        game.paused = true;
-        game.overlays.add('game_over');
-      });
-      return null;
-    }
-  }
-
   double? get targetAngle => target == null ? null : _calculateAngle();
-
-
 
   _onAttackCompleted() {
     _attackOrRemove();
@@ -350,96 +444,6 @@ class UnitBase extends SpriteAnimationGroupComponent<UnitState>
         targetStaticQueue.remove(target);
       }
     }
-  }
-
-  _followTarget(double dt) {
-    var angle = targetAngle!;
-    if (angle <= 22.5 && angle >= -22.5) {
-      current = UnitState.walkingLeft;
-    }
-    else if (angle > 22.5 && angle <= 67.5) {
-      current = UnitState.walkingTopLeft;
-    }
-    else if (angle > 67.5 && angle <= 112.5) {
-      current = UnitState.walkingTop;
-    }
-    else if (angle > 113.5 && angle <= 157.5) {
-      current = UnitState.walkingTopRight;
-    }
-    else if ((angle > 157.5 && angle > -157.5)) {
-      current = UnitState.walkingRight;
-    }
-    else if (angle < -113.5 && angle >= -157.5) {
-      current = UnitState.walkingBottomRight;
-    }
-    else if (angle < -67.5 && angle >= -112.5) {
-      current = UnitState.walkingBottom;
-    }
-    else if (angle < -22.5 && angle >= -67.5) {
-      current = UnitState.walkingBottomLeft;
-    }
-    _walk(dt);
-  }
-
-  _walk(double dt) {
-    const maxSpeed = 100;
-    var maxSpeedNoAngle = sqrt(pow(maxSpeed, 2) / 2);
-    var horizontalSpeed = targetAngle != null ? (maxSpeed * cos(targetAngle! * pi / 180)).abs() : maxSpeedNoAngle;
-    var verticalSpeed = targetAngle != null ? (maxSpeed * sin(targetAngle! * pi / 180)).abs() : maxSpeedNoAngle;
-
-    switch (current) {
-      case UnitState.idleBottom:
-      case UnitState.idleBottomRight:
-      case UnitState.idleRight:
-      case UnitState.idleTopRight:
-      case UnitState.idleTop:
-      case UnitState.idleTopLeft:
-      case UnitState.idleLeft:
-      case UnitState.idleBottomLeft:
-        break;
-
-      case UnitState.walkingBottom:
-        position.y += dt * maxSpeed;
-        break;
-      case UnitState.walkingBottomRight:
-        position.y += dt * verticalSpeed;
-        position.x += dt * horizontalSpeed;
-        break;
-      case UnitState.walkingRight:
-        position.x += dt * maxSpeed;
-        break;
-      case UnitState.walkingTopRight:
-        position.y -= dt * verticalSpeed;
-        position.x += dt * horizontalSpeed;
-        break;
-      case UnitState.walkingTop:
-        position.y -= dt * maxSpeed;
-        break;
-      case UnitState.walkingTopLeft:
-        position.y -= dt * verticalSpeed;
-        position.x -= dt * horizontalSpeed;
-        break;
-      case UnitState.walkingLeft:
-        position.x -= dt * maxSpeed;
-        break;
-
-      case UnitState.walkingBottomLeft:
-        position.y += dt * verticalSpeed;
-        position.x -= dt * horizontalSpeed;
-        break;
-      default:
-        break;
-    }
-
-    if (position.y > game.size.y) {
-      removeFromParent();
-    }
-  }
-
-  double _calculateAngle() {
-    var angle = _angleOfTarget(center, (target as PositionComponent).center);
-
-    return double.parse((angle).toStringAsFixed(2));
   }
 
   bool _isTargetOnAttackRange() {
