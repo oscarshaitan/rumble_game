@@ -1,12 +1,8 @@
-import 'package:flame/components.dart';
-import 'package:flame/events.dart';
-import 'package:flame/extensions.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart' hide Image, Gradient;
 import 'package:flutter/material.dart';
 import 'package:rumble_game/buildings/tree.dart';
 import 'package:rumble_game/game_core/enums.dart';
-import 'package:rumble_game/units/units_impl.dart';
 
 void main() {
   final myGame = MyGame();
@@ -33,19 +29,6 @@ class MyGame extends FlameGame with HasCollisionDetection {
   }
 }
 
-class MyComponent extends SpriteComponent with HasGameReference<MyGame>, TapCallbacks, DoubleTapCallbacks {
-  MyComponent()
-      : super(
-          size: Vector2.all(32),
-          scale: Vector2.all(10),
-        );
-
-  @override
-  void onDoubleTapUp(DoubleTapEvent event) {
-    game.add(OrcGrunt(key: ComponentKey.named('orc')));
-  }
-}
-
 class GameOver extends StatelessWidget {
   const GameOver(this.game, {super.key});
 
@@ -56,6 +39,7 @@ class GameOver extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     var humansTrees = game.children.query<Tree>().where((element) => element.team == Team.cyan).length;
     var orcsTrees = game.children.query<Tree>().where((element) => element.team == Team.red).length;
+
     return Material(
       color: Colors.transparent,
       child: Center(
